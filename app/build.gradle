@@ -30,7 +30,7 @@ android {
             path "src/main/cpp/CMakeLists.txt"
         }
     }
-    // Используем максимально доступную установленную версию NDK
+    // Explicitly pin latest installed NDK version for reproducible builds
     ndkVersion "29.0.13846066"
 }
 dependencies {

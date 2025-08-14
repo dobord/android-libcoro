@@ -57,6 +57,7 @@ For accurate conditional compilation highlighting generate `compile_commands.jso
 
 ## Language policy
 All comments, log strings, commit messages, and documentation must be written in English only (see `.github/copilot-instructions.md`).
+This also applies to build scripts (`build.gradle`, `settings.gradle`, CMake files) and shell/python scripts under `scripts/`.
 
 ## Licenses
 Consult third‑party component directories (`external/libcoro`, `external/libcoro/vendor/c-ares`, OpenSSL) for their respective licenses.
