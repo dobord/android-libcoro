@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Git pre-commit hook to enforce clang-format on staged C/C++ files.
+set -euo pipefail
+
+if ! command -v clang-format >/dev/null 2>&1; then
+  echo "[pre-commit] clang-format not found; skipping format check" >&2
+  exit 0
+fi
+
+# Collect staged C/C++ files
+FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cc|cpp|cxx|h|hpp)$' | grep -vE '^(third_party/|build/)' || true)
+[ -z "$FILES" ] && exit 0
+
+FAIL=0
+for f in $FILES; do
+  if ! diff -u <(cat "$f") <(clang-format "$f"); then
+    echo "[pre-commit] clang-format mismatch: $f" >&2
+    FAIL=1
+  fi
+done
+
+if [ $FAIL -ne 0 ]; then
+  echo
+  echo "Run to fix:" >&2
+  echo "  clang-format -i $FILES" >&2
+  exit 1
+fi

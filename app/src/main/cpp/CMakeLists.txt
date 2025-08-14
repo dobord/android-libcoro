@@ -2,10 +2,10 @@ cmake_minimum_required(VERSION 3.18)
 project(libcoroTest)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# JNI не требуется здесь напрямую: функции JNIEXPORT определены вручную.
+# JNI not required directly here: JNIEXPORT functions are declared manually.
 
 # --- OpenSSL prebuilts integration ---
-# Ожидаем результат скрипта build_openssl.sh в external/openssl/<ABI>
+# Expect output of build_openssl.sh in external/openssl/<ABI>
 if(DEFINED ANDROID_ABI)
 	set(_OPENSSL_CANDIDATE "${PROJECT_SOURCE_DIR}/../../../../external/openssl/${ANDROID_ABI}")
 	if(EXISTS "${_OPENSSL_CANDIDATE}/lib/libssl.a")
@@ -25,10 +25,10 @@ if(DEFINED ANDROID_ABI)
 	endif()
 endif()
 
-# Путь к submodule (исправлен относительный путь)
+# Path to submodule (fixed relative path)
 set(LIBCORO_DIR ${PROJECT_SOURCE_DIR}/../../../../external/libcoro)
 if(NOT EXISTS ${LIBCORO_DIR}/CMakeLists.txt)
-	message(FATAL_ERROR "libcoro submodule не найден по пути ${LIBCORO_DIR}. Убедитесь что git submodule init/update выполнен.")
+	message(FATAL_ERROR "libcoro submodule not found at ${LIBCORO_DIR}. Ensure 'git submodule init && git submodule update' was run.")
 endif()
 
 add_library(coroTest SHARED main.cpp)
