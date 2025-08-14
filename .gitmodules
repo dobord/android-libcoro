@@ -1,0 +1,3 @@
+[submodule "external/libcoro"]
+	path = external/libcoro
+	url = git@github.com:dobord/libcoro.git

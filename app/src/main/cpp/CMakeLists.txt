@@ -1,0 +1,41 @@
+cmake_minimum_required(VERSION 3.18)
+project(libcoroTest)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# JNI не требуется здесь напрямую: функции JNIEXPORT определены вручную.
+
+# --- OpenSSL prebuilts integration ---
+# Ожидаем результат скрипта build_openssl.sh в external/openssl/<ABI>
+if(DEFINED ANDROID_ABI)
+	set(_OPENSSL_CANDIDATE "${PROJECT_SOURCE_DIR}/../../../../external/openssl/${ANDROID_ABI}")
+	if(EXISTS "${_OPENSSL_CANDIDATE}/lib/libssl.a")
+		message(STATUS "Using prebuilt OpenSSL in ${_OPENSSL_CANDIDATE}")
+		# Hint both config & module find modes
+		set(OPENSSL_ROOT_DIR "${_OPENSSL_CANDIDATE}" CACHE PATH "")
+		set(OPENSSL_USE_STATIC_LIBS ON CACHE BOOL "")
+		# Predefine variables FindOpenSSL.cmake looks for (defensive for cross-compiling)
+		set(OPENSSL_INCLUDE_DIR "${_OPENSSL_CANDIDATE}/include" CACHE PATH "")
+		set(OPENSSL_CRYPTO_LIBRARY "${_OPENSSL_CANDIDATE}/lib/libcrypto.a" CACHE FILEPATH "")
+		set(OPENSSL_SSL_LIBRARY "${_OPENSSL_CANDIDATE}/lib/libssl.a" CACHE FILEPATH "")
+		set(OPENSSL_LIBRARIES "${OPENSSL_SSL_LIBRARY};${OPENSSL_CRYPTO_LIBRARY}" CACHE STRING "")
+		# Allow package config lookup
+		list(PREPEND CMAKE_PREFIX_PATH "${_OPENSSL_CANDIDATE}")
+	else()
+		message(WARNING "Prebuilt OpenSSL for ABI ${ANDROID_ABI} not found at ${_OPENSSL_CANDIDATE}. Run build_openssl.sh first.")
+	endif()
+endif()
+
+# Путь к submodule (исправлен относительный путь)
+set(LIBCORO_DIR ${PROJECT_SOURCE_DIR}/../../../../external/libcoro)
+if(NOT EXISTS ${LIBCORO_DIR}/CMakeLists.txt)
+	message(FATAL_ERROR "libcoro submodule не найден по пути ${LIBCORO_DIR}. Убедитесь что git submodule init/update выполнен.")
+endif()
+
+add_library(coroTest SHARED main.cpp)
+# Trim libcoro build to essentials
+set(LIBCORO_BUILD_TESTS OFF CACHE BOOL "")
+set(LIBCORO_BUILD_EXAMPLES OFF CACHE BOOL "")
+add_subdirectory(${LIBCORO_DIR} external_libcoro)
+find_library(ANDROID_LOG_LIB log)
+target_link_libraries(coroTest PRIVATE libcoro ${ANDROID_LOG_LIB})
+target_compile_definitions(coroTest PRIVATE LIBCORO_FEATURE_NETWORKING LIBCORO_FEATURE_TLS)
