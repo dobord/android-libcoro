@@ -55,11 +55,12 @@ This repository uses C++20 coroutines with libcoro and yaml-cpp. Please follow t
 ## Style specifics
 - Avoid blocking syscalls without prior `poll()`; prefer non‑blocking and cooperative scheduling.
 - When adding TLS client logic, guard with `#ifdef LIBCORO_FEATURE_TLS` and use the awaitable TLS API.
-- Project language policy: all source code comments, log messages, commit messages, and documentation MUST be written in English only (no mixed languages) to keep the codebase consistent and accessible.
+- Project language policy: all source code comments, log messages, commit messages, and documentation MUST be written in English only (no mixed languages) to keep the codebase consistent and accessible. This also applies to build scripts (`build.gradle`, `settings.gradle`, CMake files) and shell/python scripts under `scripts/`.
+
 
 Following these rules keeps coroutine lifetimes explicit, avoids scheduler mismatches, and prevents subtle endianness and I/O pitfalls.
 
 ## Code formatting
 - All modifications to C/C++ files (*.c, *.cc, *.cpp, *.cxx, *.h, *.hpp) must be auto-formatted with `clang-format` using the root `.clang-format` file.
-- Before finalizing a MR/PR: run `cmake --build <build_dir> --target format` (or manually `clang-format -i` for the changed files) and ensure `scripts/check_format.sh` passes without errors.
+- Before finalizing a git commit: run `cmake --build <build_dir> --target format` (or manually `clang-format -i` for the changed files) and ensure `scripts/check_format.sh` passes without errors.
 - Non-formatted changes must not be committed.

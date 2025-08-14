@@ -28,7 +28,8 @@ coro::task<void> test_networking_tls()
 {
 #if defined(LIBCORO_FEATURE_NETWORKING) && defined(LIBCORO_FEATURE_TLS)
     try {
-        auto scheduler = io_scheduler::make_shared();
+        auto scheduler = default_executor::io_executor();
+        co_await scheduler->schedule(); // Ensure execution on shared io_scheduler before any I/O
         auto tls_ctx = std::make_shared<net::tls::context>();
 
         net::dns::resolver resolver{scheduler, std::chrono::seconds{5}};
