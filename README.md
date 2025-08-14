@@ -1,39 +1,39 @@
 # android-libcoro
 
-Пример Android-проекта, интегрирующего [libcoro](external/libcoro) с возможностями networking + TLS и статически собранным OpenSSL.
+Sample Android project integrating [libcoro](external/libcoro) with networking + TLS features and a statically built OpenSSL.
 
-## Требования
-- Android SDK / NDK (ndkVersion задаётся в `app/build.gradle`)
-- CMake / Ninja (через Android Gradle Plugin)
-- Git submodules (обновить: `git submodule update --init --recursive`)
+## Requirements
+- Android SDK / NDK (see `ndkVersion` in `app/build.gradle`)
+- CMake / Ninja (via the Android Gradle Plugin)
+- Git submodules (`git submodule update --init --recursive`)
 
 ## OpenSSL
-Скрипт `build_openssl.sh` собирает статические либы в `external/openssl/<ABI>`. Перед сборкой приложения убедитесь, что соответствующая директория существует (для каждого ABI, который включён в `abiFilters`).
+Run `build_openssl.sh` to produce static libraries under `external/openssl/<ABI>`. Ensure the directory for each enabled ABI (in `abiFilters`) exists before building the app.
 
-## Запуск сборки
+## Build
 ```
 ./gradlew :app:assembleDebug
 ```
-APK появится в `app/build/outputs/apk/debug/`.
+The APK will be in `app/build/outputs/apk/debug/`.
 
-## Форматирование кода (clang-format)
-В корне репозитория лежит файл `.clang-format` (базируется на LLVM стиле с кастомизациями). Все редактируемые / добавляемые C++ исходники должны быть прогнаны через `clang-format` до коммита.
+## Code formatting (clang-format)
+The root `.clang-format` (LLVM based with customizations) governs all C/C++ sources. Always format modified or newly added files before committing.
 
-### Быстрая проверка вручную
+### Quick manual format
 ```
 clang-format -i app/src/main/cpp/*.cpp
 clang-format -i external/libcoro/include/coro/*.hpp
 ```
-(Добавьте пути по необходимости.)
+Add more paths as needed.
 
-### Массовое автоформатирование
+### Bulk formatting
 ```
 find app/src/main/cpp -name "*.c*" -o -name "*.h*" | xargs clang-format -i
 find external/libcoro/include/coro -name "*.hpp" | xargs clang-format -i
 ```
 
-### Git hook (опционально)
-Создайте `.git/hooks/pre-commit`:
+### Optional Git hook
+Create `.git/hooks/pre-commit`:
 ```
 #!/usr/bin/env bash
 CHANGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cc|cpp|cxx|h|hpp)$' || true)
@@ -44,16 +44,19 @@ for f in $CHANGED; do
   git add "$f"
 done
 ```
-Сделайте его исполняемым:
+Make it executable:
 ```
 chmod +x .git/hooks/pre-commit
 ```
 
-## Логирование
-Используются макросы `LOGE`/`LOGI` в `main.cpp`. При необходимости вынесите их в отдельный заголовок `log.hpp`.
+## Logging
+Macros `LOGE` / `LOGI` in `main.cpp` wrap `__android_log_print`. Extract them to a dedicated header (e.g. `log.hpp`) if reused broadly.
 
-## Подсветка IntelliSense
-Для корректной подсветки условно скомпилированного кода можно сгенерировать `compile_commands.json` (добавьте `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` в конфигурацию CMake) и указать путь в настройках VS Code C/C++.
+## IntelliSense
+For accurate conditional compilation highlighting generate `compile_commands.json` (`-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`) and point your editor to it. A minimal fallback defines feature macros for IntelliSense inside `main.cpp` only.
 
-## Лицензии
-Сторонние компоненты смотрите в их директориях (`external/libcoro`, `external/libcoro/vendor/c-ares`, OpenSSL).
+## Language policy
+All comments, log strings, commit messages, and documentation must be written in English only (see `.github/copilot-instructions.md`).
+
+## Licenses
+Consult third‑party component directories (`external/libcoro`, `external/libcoro/vendor/c-ares`, OpenSSL) for their respective licenses.
