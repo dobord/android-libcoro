@@ -1,0 +1,85 @@
+name: android-emulator-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  instrumented:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK tools
+        uses: android-actions/setup-android@v3
+
+      - name: Create AVD
+        run: |
+          sdkmanager --install "system-images;android-30;default;x86_64" > /dev/null
+          echo "no" | avdmanager create avd -n test -k "system-images;android-30;default;x86_64" --force
+
+      - name: Launch emulator
+        run: |
+          EMU_CMD="$ANDROID_HOME/emulator/emulator -avd test -no-window -no-audio -no-boot-anim -accel off -gpu swiftshader_indirect -wipe-data" \
+          nohup bash -c "$EMU_CMD" &
+          adb wait-for-device
+          # Wait until boot completed
+          boot_completed="0"
+          while [ "$boot_completed" != "1" ]; do
+            sleep 5
+            boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+          done
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Install and run app
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -n1)
+          adb install -r "$APK"
+          adb logcat -c
+          # Start activity and wait until it finishes
+          adb shell am start -n com.example.libcorotest/.MainActivity
+          # Poll for process exit by checking activity stack disappearing
+          TIMEOUT=300
+          while [ $TIMEOUT -gt 0 ]; do
+            amstack=$(adb shell dumpsys activity activities | grep -E "Running activities|Activities=.*com.example.libcorotest" || true)
+            echo "$amstack"
+            if ! echo "$amstack" | grep -q com.example.libcorotest ; then
+              break
+            fi
+            sleep 2
+            TIMEOUT=$((TIMEOUT-2))
+          done
+          adb logcat -d > emulator.log || true
+          echo "==== LAST 200 LINES LOG ===="
+          tail -n 200 emulator.log || true
+
+      - name: Assert success
+        run: |
+          # Check for Exit code: 0 line in our logs
+          if ! grep -q "Exit code: 0" emulator.log; then
+            echo "Tests did not report success" >&2
+            exit 1
+          fi
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-logs
+          path: |
+            emulator.log
+            app/build/outputs/apk/debug/*.apk
