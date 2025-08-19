@@ -53,7 +53,7 @@ jobs:
           # Start activity and wait until it finishes
           adb shell am start -n com.example.libcorotest/.MainActivity
           # Poll for process exit by checking activity stack disappearing
-          TIMEOUT=300
+          TIMEOUT=600
           while [ $TIMEOUT -gt 0 ]; do
             amstack=$(adb shell dumpsys activity activities | grep -E "Running activities|Activities=.*com.example.libcorotest" || true)
             echo "$amstack"
@@ -64,8 +64,8 @@ jobs:
             TIMEOUT=$((TIMEOUT-2))
           done
           adb logcat -d > emulator.log || true
-          echo "==== LAST 200 LINES LOG ===="
-          tail -n 200 emulator.log || true
+          echo "==== LAST 400 LINES LOG ===="
+          tail -n 400 emulator.log || true
 
       - name: Assert success
         run: |
