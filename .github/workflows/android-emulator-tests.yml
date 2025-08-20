@@ -22,6 +22,15 @@ jobs:
       - name: Install Android SDK tools
         uses: android-actions/setup-android@v3
 
+      - name: Install emulator runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libpulse0 libnss3 libxcomposite1 libxcursor1 libxdamage1 \
+            libxi6 libxrandr2 libxtst6 libasound2 libx11-6 libx11-xcb1 \
+            libxcb1 libxss1 libglu1-mesa libdbus-1-3 ca-certificates \
+            fonts-liberation libwayland-client0 libwayland-cursor0 || true
+
       - name: Create AVD
         run: |
           sdkmanager --channel=0 --install "system-images;android-30;default;x86_64" > /dev/null
@@ -33,6 +42,8 @@ jobs:
           set -euo pipefail
           export ADB="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/platform-tools/adb"
           export EMU_BIN="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/emulator/emulator"
+          export QT_QPA_PLATFORM=offscreen
+          export ANDROID_EMULATOR_USE_SYSTEM_LIBS=1
 
           # Show versions and paths for diagnostics
           echo "Using EMULATOR: $EMU_BIN"
@@ -45,18 +56,33 @@ jobs:
           "$ADB" start-server
 
           # Start emulator in background (software rendering, no snapshot)
+          LOG_FILE=emulator_stdout.log
           nohup "$EMU_BIN" \
             -avd test \
             -no-window -no-audio -no-boot-anim \
             -accel off -gpu swiftshader_indirect \
             -no-snapshot -wipe-data \
             -netfast \
-            > emulator_stdout.log 2>&1 &
+            > "$LOG_FILE" 2>&1 &
+          EMU_PID=$!
+
+          # Early crash detection
+          sleep 2
+          if ! kill -0 "$EMU_PID" 2>/dev/null; then
+            echo "Emulator process exited early" >&2
+            tail -n 200 "$LOG_FILE" || true
+            exit 1
+          fi
 
           # Wait until any emulator device appears (timeout 5 min)
           echo "Waiting for emulator device to appear..."
           set +e
           for i in $(seq 1 150); do
+            if ! kill -0 "$EMU_PID" 2>/dev/null; then
+              echo "Emulator process died while waiting for device" >&2
+              tail -n 200 "$LOG_FILE" || true
+              exit 1
+            fi
             DEV=$("$ADB" devices | awk '/emulator-/{print $1; exit}')
             if [ -n "$DEV" ]; then
               echo "Found device: $DEV"
@@ -67,7 +93,7 @@ jobs:
           set -e
           if [ -z "${DEV:-}" ]; then
             echo "Emulator device did not appear in time" >&2
-            tail -n 200 emulator_stdout.log || true
+            tail -n 200 "$LOG_FILE" || true
             exit 1
           fi
 
@@ -77,6 +103,11 @@ jobs:
           echo "Waiting for Android boot to complete..."
           # Wait until sys.boot_completed=1 and service.bootanim.exit=1 (timeout ~5 min)
           for i in $(seq 1 150); do
+            if ! kill -0 "$EMU_PID" 2>/dev/null; then
+              echo "Emulator process died during boot" >&2
+              tail -n 200 "$LOG_FILE" || true
+              exit 1
+            fi
             BOOTED=$("$ADB" -s "$DEV" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
             BOOTANIM=$("$ADB" -s "$DEV" shell getprop service.bootanim.exit 2>/dev/null | tr -d '\r')
             if [ "$BOOTED" = "1" ] && [ "$BOOTANIM" = "1" ]; then
