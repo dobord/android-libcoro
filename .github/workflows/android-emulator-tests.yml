@@ -24,38 +24,90 @@ jobs:
 
       - name: Create AVD
         run: |
-          sdkmanager --install "system-images;android-30;default;x86_64" > /dev/null
+          sdkmanager --channel=0 --install "system-images;android-30;default;x86_64" > /dev/null
+          avdmanager delete avd -n test || true
           echo "no" | avdmanager create avd -n test -k "system-images;android-30;default;x86_64" --force
 
       - name: Launch emulator
         run: |
-          EMU_CMD="$ANDROID_HOME/emulator/emulator -avd test -no-window -no-audio -no-boot-anim -accel off -gpu swiftshader_indirect -wipe-data" \
-          nohup bash -c "$EMU_CMD" &
-          adb wait-for-device
-          # Wait until boot completed
-          boot_completed="0"
-          while [ "$boot_completed" != "1" ]; do
-            sleep 5
-            boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+          set -euo pipefail
+          export ADB="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/platform-tools/adb"
+          export EMU_BIN="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/emulator/emulator"
+
+          # Show versions and paths for diagnostics
+          echo "Using EMULATOR: $EMU_BIN"
+          echo "Using ADB: $ADB"
+          "$EMU_BIN" -version || true
+          "$ADB" version || true
+
+          # Ensure adb server is running and clean
+          "$ADB" kill-server || true
+          "$ADB" start-server
+
+          # Start emulator in background (software rendering, no snapshot)
+          nohup "$EMU_BIN" \
+            -avd test \
+            -no-window -no-audio -no-boot-anim \
+            -accel off -gpu swiftshader_indirect \
+            -no-snapshot -wipe-data \
+            -netfast \
+            > emulator_stdout.log 2>&1 &
+
+          # Wait until any emulator device appears (timeout 5 min)
+          echo "Waiting for emulator device to appear..."
+          set +e
+          for i in $(seq 1 150); do
+            DEV=$("$ADB" devices | awk '/emulator-/{print $1; exit}')
+            if [ -n "$DEV" ]; then
+              echo "Found device: $DEV"
+              break
+            fi
+            sleep 2
           done
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
+          set -e
+          if [ -z "${DEV:-}" ]; then
+            echo "Emulator device did not appear in time" >&2
+            tail -n 200 emulator_stdout.log || true
+            exit 1
+          fi
+
+          # Wait for device to be ready
+          "$ADB" -s "$DEV" wait-for-device
+
+          echo "Waiting for Android boot to complete..."
+          # Wait until sys.boot_completed=1 and service.bootanim.exit=1 (timeout ~5 min)
+          for i in $(seq 1 150); do
+            BOOTED=$("$ADB" -s "$DEV" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            BOOTANIM=$("$ADB" -s "$DEV" shell getprop service.bootanim.exit 2>/dev/null | tr -d '\r')
+            if [ "$BOOTED" = "1" ] && [ "$BOOTANIM" = "1" ]; then
+              echo "Boot completed"
+              break
+            fi
+            sleep 2
+          done
+
+          # Speed up animations
+          "$ADB" -s "$DEV" shell settings put global window_animation_scale 0 || true
+          "$ADB" -s "$DEV" shell settings put global transition_animation_scale 0 || true
+          "$ADB" -s "$DEV" shell settings put global animator_duration_scale 0 || true
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Install and run app
         run: |
+          set -euo pipefail
+          export ADB="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/platform-tools/adb"
+          export DEV=$("$ADB" devices | awk '/emulator-/{print $1; exit}')
           APK=$(ls app/build/outputs/apk/debug/*.apk | head -n1)
-          adb install -r "$APK"
-          adb logcat -c
+          "$ADB" -s "$DEV" install -r "$APK"
+          "$ADB" -s "$DEV" logcat -c
           # Start activity and wait until it finishes
-          adb shell am start -n com.example.libcorotest/.MainActivity
+          "$ADB" -s "$DEV" shell am start -n com.example.libcorotest/.MainActivity
           # Poll for process exit by checking activity stack disappearing
           TIMEOUT=600
           while [ $TIMEOUT -gt 0 ]; do
-            amstack=$(adb shell dumpsys activity activities | grep -E "Running activities|Activities=.*com.example.libcorotest" || true)
+            amstack=$("$ADB" -s "$DEV" shell dumpsys activity activities | grep -E "Running activities|Activities=.*com.example.libcorotest" || true)
             echo "$amstack"
             if ! echo "$amstack" | grep -q com.example.libcorotest ; then
               break
@@ -63,7 +115,7 @@ jobs:
             sleep 2
             TIMEOUT=$((TIMEOUT-2))
           done
-          adb logcat -d > emulator.log || true
+          "$ADB" -s "$DEV" logcat -d > emulator.log || true
           echo "==== LAST 400 LINES LOG ===="
           tail -n 400 emulator.log || true
 
