@@ -163,7 +163,7 @@ jobs:
           "$ADB" -s "$DEV" install -r "$APK"
           # Prepare test config in app's files dir (limit scope + tighter timeout)
           # NOTE: run-as requires debug build and will operate in app's data directory
-          CONFIG_CONTENT="filter=[latch] [semaphore] [condition_variable] [when_any]\ntimeout=300\n"
+          CONFIG_CONTENT="filter=[tls_server] [tcp_server] [dns] [io_scheduler] [thread_pool] [latch] [semaphore] [condition_variable] [when_any]\ntimeout=3590\n"
           "$ADB" -s "$DEV" shell run-as com.example.libcorotest sh -c 'mkdir -p files && cat > files/coro_test_config.properties' <<< "$CONFIG_CONTENT" || true
           "$ADB" -s "$DEV" logcat -c
           # Start activity and wait until it finishes
