@@ -39,12 +39,16 @@ jobs:
         run: |
           set -euo pipefail
           export ANDROID_AVD_HOME="$HOME/.android/avd"
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          export EMU_BIN="$ANDROID_SDK_ROOT/emulator/emulator"
           mkdir -p "$ANDROID_AVD_HOME"
+          # Ensure emulator and platform-tools are installed
+          sdkmanager --channel=0 --install "emulator" "platform-tools" > /dev/null || true
           sdkmanager --channel=0 --install "system-images;android-30;default;x86_64" > /dev/null
           avdmanager delete avd -n test || true
           echo "no" | avdmanager create avd -n test -k "system-images;android-30;default;x86_64" --force
-          echo "AVDs available:" && emulator -list-avds || true
-          if ! emulator -list-avds | grep -q '^test$'; then
+          echo "AVDs available:" && "$EMU_BIN" -list-avds || true
+          if ! "$EMU_BIN" -list-avds | grep -q '^test$'; then
             echo "AVD 'test' was not created correctly" >&2
             ls -la "$ANDROID_AVD_HOME" || true
             exit 1
