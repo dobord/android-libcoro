@@ -69,7 +69,7 @@ jobs:
           "$EMU_BIN" -version || true
           "$ADB" version || true
           echo "AVDs available:"
-          emulator -list-avds || true
+          "$EMU_BIN" -list-avds || true
 
           # Ensure adb server is running and clean
           "$ADB" kill-server || true
