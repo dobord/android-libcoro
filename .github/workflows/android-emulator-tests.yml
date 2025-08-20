@@ -31,17 +31,31 @@ jobs:
             libxcb1 libxss1 libglu1-mesa libdbus-1-3 ca-certificates \
             fonts-liberation libwayland-client0 libwayland-cursor0 || true
 
+      - name: Accept Android licenses
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+
       - name: Create AVD
         run: |
+          set -euo pipefail
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           sdkmanager --channel=0 --install "system-images;android-30;default;x86_64" > /dev/null
           avdmanager delete avd -n test || true
           echo "no" | avdmanager create avd -n test -k "system-images;android-30;default;x86_64" --force
+          echo "AVDs available:" && emulator -list-avds || true
+          if ! emulator -list-avds | grep -q '^test$'; then
+            echo "AVD 'test' was not created correctly" >&2
+            ls -la "$ANDROID_AVD_HOME" || true
+            exit 1
+          fi
 
       - name: Launch emulator
         run: |
           set -euo pipefail
           export ADB="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/platform-tools/adb"
           export EMU_BIN="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/emulator/emulator"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
           export QT_QPA_PLATFORM=offscreen
           export ANDROID_EMULATOR_USE_SYSTEM_LIBS=1
 
@@ -50,6 +64,8 @@ jobs:
           echo "Using ADB: $ADB"
           "$EMU_BIN" -version || true
           "$ADB" version || true
+          echo "AVDs available:"
+          emulator -list-avds || true
 
           # Ensure adb server is running and clean
           "$ADB" kill-server || true
