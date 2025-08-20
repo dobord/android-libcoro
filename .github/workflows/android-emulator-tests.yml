@@ -142,15 +142,24 @@ jobs:
           "$ADB" -s "$DEV" shell settings put global transition_animation_scale 0 || true
           "$ADB" -s "$DEV" shell settings put global animator_duration_scale 0 || true
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Build debug APK (all ABIs in one)
+        run: |
+          ./gradlew :app:clean :app:assembleDebug --stacktrace
+          echo "APK outputs:"
+          ls -la app/build/outputs/apk/debug || true
 
       - name: Install and run app
         run: |
           set -euo pipefail
           export ADB="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/platform-tools/adb"
           export DEV=$("$ADB" devices | awk '/emulator-/{print $1; exit}')
+          # Pick single multi-ABI APK
           APK=$(ls app/build/outputs/apk/debug/*.apk | head -n1)
+          if [ -z "$APK" ]; then
+            echo "APK not found; available files:" >&2
+            ls -la app/build/outputs/apk/debug/ || true
+            exit 1
+          fi
           "$ADB" -s "$DEV" install -r "$APK"
           "$ADB" -s "$DEV" logcat -c
           # Start activity and wait until it finishes

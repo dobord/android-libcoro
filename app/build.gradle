@@ -16,7 +16,8 @@ android {
             }
         }
         ndk {
-            abiFilters 'arm64-v8a'
+            // Build and package native libs for all common ABIs
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
         }
     }
     buildTypes {
@@ -28,6 +29,12 @@ android {
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
+        }
+    }
+    // Build a single APK that includes all filtered ABIs
+    splits {
+        abi {
+            enable false
         }
     }
     // Explicitly pin latest installed NDK version for reproducible builds
