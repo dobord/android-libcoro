@@ -31,17 +31,11 @@ extern "C" {
 # ifndef OPENSSL_RAND_SEED_OS
 #  define OPENSSL_RAND_SEED_OS
 # endif
-# ifndef OPENSSL_THREADS
-#  define OPENSSL_THREADS
-# endif
 # ifndef OPENSSL_NO_ACVP_TESTS
 #  define OPENSSL_NO_ACVP_TESTS
 # endif
 # ifndef OPENSSL_NO_AFALGENG
 #  define OPENSSL_NO_AFALGENG
-# endif
-# ifndef OPENSSL_NO_APPS
-#  define OPENSSL_NO_APPS
 # endif
 # ifndef OPENSSL_NO_ASAN
 #  define OPENSSL_NO_ASAN
@@ -57,6 +51,9 @@ extern "C" {
 # endif
 # ifndef OPENSSL_NO_CRYPTO_MDEBUG_BACKTRACE
 #  define OPENSSL_NO_CRYPTO_MDEBUG_BACKTRACE
+# endif
+# ifndef OPENSSL_NO_DEFAULT_THREAD_POOL
+#  define OPENSSL_NO_DEFAULT_THREAD_POOL
 # endif
 # ifndef OPENSSL_NO_DEMOS
 #  define OPENSSL_NO_DEMOS
@@ -136,11 +133,17 @@ extern "C" {
 # ifndef OPENSSL_NO_TFO
 #  define OPENSSL_NO_TFO
 # endif
+# ifndef OPENSSL_NO_THREAD_POOL
+#  define OPENSSL_NO_THREAD_POOL
+# endif
 # ifndef OPENSSL_NO_TRACE
 #  define OPENSSL_NO_TRACE
 # endif
 # ifndef OPENSSL_NO_UBSAN
 #  define OPENSSL_NO_UBSAN
+# endif
+# ifndef OPENSSL_NO_UI_CONSOLE
+#  define OPENSSL_NO_UI_CONSOLE
 # endif
 # ifndef OPENSSL_NO_UNIT_TEST
 #  define OPENSSL_NO_UNIT_TEST
