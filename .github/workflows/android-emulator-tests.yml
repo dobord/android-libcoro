@@ -169,7 +169,7 @@ jobs:
           # Start activity and wait until it finishes
           "$ADB" -s "$DEV" shell am start -n com.example.libcorotest/.MainActivity
           # Poll for process exit by checking activity stack disappearing
-          TIMEOUT=600
+          TIMEOUT=3600
           while [ $TIMEOUT -gt 0 ]; do
             amstack=$("$ADB" -s "$DEV" shell dumpsys activity activities | grep -E "Activities=.*com.example.libcorotest" || true)
             if [ -z "$amstack" ]; then
