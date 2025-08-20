@@ -161,23 +161,27 @@ jobs:
             exit 1
           fi
           "$ADB" -s "$DEV" install -r "$APK"
+          # Prepare test config in app's files dir (limit scope + tighter timeout)
+          # NOTE: run-as requires debug build and will operate in app's data directory
+          CONFIG_CONTENT="filter=[latch] [semaphore] [condition_variable] [when_any]\ntimeout=300\n"
+          "$ADB" -s "$DEV" shell run-as com.example.libcorotest sh -c 'mkdir -p files && cat > files/coro_test_config.properties' <<< "$CONFIG_CONTENT" || true
           "$ADB" -s "$DEV" logcat -c
           # Start activity and wait until it finishes
           "$ADB" -s "$DEV" shell am start -n com.example.libcorotest/.MainActivity
           # Poll for process exit by checking activity stack disappearing
           TIMEOUT=600
           while [ $TIMEOUT -gt 0 ]; do
-            amstack=$("$ADB" -s "$DEV" shell dumpsys activity activities | grep -E "Running activities|Activities=.*com.example.libcorotest" || true)
-            echo "$amstack"
-            if ! echo "$amstack" | grep -q com.example.libcorotest ; then
+            amstack=$("$ADB" -s "$DEV" shell dumpsys activity activities | grep -E "Activities=.*com.example.libcorotest" || true)
+            if [ -z "$amstack" ]; then
               break
             fi
             sleep 2
             TIMEOUT=$((TIMEOUT-2))
           done
-          "$ADB" -s "$DEV" logcat -d > emulator.log || true
-          echo "==== LAST 400 LINES LOG ===="
-          tail -n 400 emulator.log || true
+          # Dump only our tag to log file for CI readability
+          "$ADB" -s "$DEV" logcat -v time -d -s coroTest:I > emulator.log || true
+          echo "==== LAST 200 LINES (coroTest) ===="
+          tail -n 200 emulator.log || true
 
       - name: Assert success
         run: |

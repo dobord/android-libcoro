@@ -19,6 +19,8 @@
 #include <chrono>
 #include <pthread.h>
 #include <future>
+#include <sstream>
+#include <map>
 
 #include "../../../../external/libcoro/test/catch_amalgamated.hpp"
 #include <signal.h>
@@ -49,6 +51,45 @@ static jobject g_activity_global = nullptr; // GlobalRef to MainActivity
 static std::mutex g_run_mutex; // serialize runs in-process
 static std::atomic<bool> g_session_used{false};
 static std::atomic<int> g_last_exit_code{-9999};
+
+// Read simple key=value properties from a file into a map.
+static std::map<std::string, std::string> read_properties_file(const std::string& path) {
+    std::map<std::string, std::string> props;
+    std::ifstream ifs(path);
+    if (!ifs.is_open()) return props;
+    std::string line;
+    while (std::getline(ifs, line)) {
+        // Strip CR and trim whitespace
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        // Skip comments and empty lines
+        auto first_non_space = line.find_first_not_of(" \t");
+        if (first_non_space == std::string::npos) continue;
+        if (line[first_non_space] == '#') continue;
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        // trim
+        auto trim = [](std::string& s) {
+            size_t b = s.find_first_not_of(" \t");
+            size_t e = s.find_last_not_of(" \t");
+            if (b == std::string::npos) { s.clear(); return; }
+            s = s.substr(b, e - b + 1);
+        };
+        trim(key); trim(val);
+        props[key] = val;
+    }
+    return props;
+}
+
+// Split a string into tokens by whitespace.
+static std::vector<std::string> split_ws(const std::string& s) {
+    std::istringstream iss(s);
+    std::vector<std::string> out;
+    std::string tok;
+    while (iss >> tok) out.push_back(tok);
+    return out;
+}
 
 static void ui_append_line(const char* line) {
     std::lock_guard<std::mutex> lk(g_sink_mutex);
@@ -187,16 +228,49 @@ static int run_all_tests_with_output(const std::string& files_dir) noexcept {
 
     int code = 2; // non-zero by default
     try {
-        // Build only filter args; other settings configured via Session API to avoid CLI incompatibilities
+        // Allow override via properties file located in files_dir
+        // File format (properties):
+        //   filter=<Catch2 test specs separated by spaces>
+        //   timeout=<seconds>
+        const std::string props_path = files_dir + "/coro_test_config.properties";
+        auto props = read_properties_file(props_path);
+
+        // Determine global timeout
+        constexpr auto kDefaultGlobalTimeout = std::chrono::seconds(600);
+        std::chrono::seconds global_timeout = kDefaultGlobalTimeout;
+        if (!props["timeout"].empty()) {
+            char* endp = nullptr;
+            long v = std::strtol(props["timeout"].c_str(), &endp, 10);
+            if (endp != props["timeout"].c_str() && v > 0 && v < 24 * 60 * 60) {
+                global_timeout = std::chrono::seconds(v);
+            }
+        }
+
+        std::vector<std::string> filter_tokens;
+        if (!props["filter"].empty()) {
+            filter_tokens = split_ws(props["filter"]);
+        }
+
+        // Construct argv for Catch2
         std::vector<const char*> argv;
         argv.push_back("coroTest");
-        // Exclude fragile/slow tests on Android emulator environment
-        argv.push_back("~[tls_server]"); // relies on external openssl tool
-        argv.push_back("~[tcp_server]"); // network flakiness on CI/emulator
-        argv.push_back("~[dns]");       // DNS resolution may be restricted
-        argv.push_back("~[bench]");     // benchmarks are slow and unnecessary here
-        argv.push_back("~[io_scheduler]"); // event-loop heavy tests may hang on some Android kernels
-        argv.push_back("~[thread_pool]"); // heavy multi-thread tests can stall on mobile/emulator
+        if (!filter_tokens.empty()) {
+            std::string joined;
+            for (auto& t : filter_tokens) {
+                argv.push_back(t.c_str());
+                joined += t + " ";
+            }
+            ui_append_line((std::string("Using test filter from properties: ") + joined).c_str());
+        } else {
+            // Default excludes for fragile/slow tests on emulator environment
+            argv.push_back("~[tls_server]");
+            argv.push_back("~[tcp_server]");
+            argv.push_back("~[dns]");
+            argv.push_back("~[bench]");
+            argv.push_back("~[io_scheduler]");
+            argv.push_back("~[thread_pool]");
+            ui_append_line("Using default test excludes suitable for emulator.");
+        }
 
         // Run Catch2 session on a separate thread and enforce a global timeout.
     auto runner = [argv]() -> int {
@@ -223,8 +297,8 @@ static int run_all_tests_with_output(const std::string& files_dir) noexcept {
         std::thread t(std::move(task));
 
     // Global timeout for the entire Catch2 run; emulator can be slow.
-    constexpr auto kGlobalTimeout = std::chrono::seconds(600);
-        if (fut.wait_for(kGlobalTimeout) == std::future_status::ready) {
+    ui_append_line((std::string("Global timeout: ") + std::to_string(global_timeout.count()) + "s").c_str());
+    if (fut.wait_for(global_timeout) == std::future_status::ready) {
             code = fut.get();
             t.join();
         } else {
