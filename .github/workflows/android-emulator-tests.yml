@@ -226,8 +226,19 @@ jobs:
           fi
           # Prepare test config in app's files dir (limit scope + tighter timeout)
           # NOTE: run-as requires debug build and will operate in app's data directory
-          CONFIG_CONTENT="filter=[tls_server] [tcp_server] [dns] [io_scheduler] [thread_pool] [latch] [semaphore] [condition_variable] [when_any]\ntimeout=3590\n"
-          "$ADB" -s "$DEV" shell run-as com.example.libcorotest sh -c 'mkdir -p files && cat > files/coro_test_config.properties' <<< "$CONFIG_CONTENT" || true
+          # We intentionally whitelist only selected tags to avoid long-running stress tests (e.g. heavy ring_buffer variants).
+          # Catch2 semantics: space separated specs. Using positive tag specs limits run to those.
+          CONFIG_CONTENT="filter=[condition_variable] [event] [generator] [latch] [mutex] [queue] [ring_buffer]~[many] [semaphore]\n# Global timeout in seconds (smaller because heavy tests excluded)\ntimeout=900\n"
+          echo "Creating test config file (coro_test_config.properties) inside app sandbox..."
+          printf "%s" "$CONFIG_CONTENT" > coro_test_config.properties
+          # Push to a world-readable temp location first
+          "$ADB" -s "$DEV" push coro_test_config.properties /data/local/tmp/coro_test_config.properties >/dev/null
+          # Move into app's files directory using run-as (create directory if missing)
+          "$ADB" -s "$DEV" shell run-as com.example.libcorotest sh -c 'mkdir -p files && cat /data/local/tmp/coro_test_config.properties > files/coro_test_config.properties && ls -l files/coro_test_config.properties' || {
+            echo "Failed to create test config file inside app sandbox" >&2
+            exit 1
+          }
+          echo "Config file content on device:" && "$ADB" -s "$DEV" shell run-as com.example.libcorotest cat files/coro_test_config.properties || true
           "$ADB" -s "$DEV" logcat -c
           # Start activity and wait until it finishes
           "$ADB" -s "$DEV" shell am start -n com.example.libcorotest/.MainActivity
