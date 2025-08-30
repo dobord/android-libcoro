@@ -233,11 +233,25 @@ jobs:
           printf "%s" "$CONFIG_CONTENT" > coro_test_config.properties
           # Push to a world-readable temp location first
           "$ADB" -s "$DEV" push coro_test_config.properties /data/local/tmp/coro_test_config.properties >/dev/null
-          # Move into app's files directory using run-as (create directory if missing)
-          "$ADB" -s "$DEV" shell run-as com.example.libcorotest sh -c 'mkdir -p files && cat /data/local/tmp/coro_test_config.properties > files/coro_test_config.properties && ls -l files/coro_test_config.properties' || {
+          # Move into app's files directory using run-as (create directory if missing).
+          # Some toybox builds have quirks with 'mkdir -p', so do existence check first.
+          set +e
+          "$ADB" -s "$DEV" shell run-as com.example.libcorotest ls -d files >/dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            "$ADB" -s "$DEV" shell run-as com.example.libcorotest mkdir files 2>/dev/null || true
+          fi
+          # Try cp first, fallback to cat redirection inside run-as shell.
+          "$ADB" -s "$DEV" shell run-as com.example.libcorotest cp /data/local/tmp/coro_test_config.properties files/coro_test_config.properties 2>/dev/null
+          if [ $? -ne 0 ]; then
+            "$ADB" -s "$DEV" shell run-as com.example.libcorotest sh -c 'cat /data/local/tmp/coro_test_config.properties > files/coro_test_config.properties' 2>/dev/null
+          fi
+          # Verify file exists now
+          "$ADB" -s "$DEV" shell run-as com.example.libcorotest ls -l files/coro_test_config.properties >/dev/null 2>&1 || {
             echo "Failed to create test config file inside app sandbox" >&2
+            "$ADB" -s "$DEV" shell run-as com.example.libcorotest ls -l files || true
             exit 1
           }
+          set -e
           echo "Config file content on device:" && "$ADB" -s "$DEV" shell run-as com.example.libcorotest cat files/coro_test_config.properties || true
           "$ADB" -s "$DEV" logcat -c
           # Start activity and wait until it finishes
