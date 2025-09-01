@@ -202,6 +202,28 @@ jobs:
             exit 1
           fi
 
+          # Additional wait: ensure storage volumes are mounted; otherwise install may NPE in PackageManager (getVolumes null).
+          echo "Waiting for storage (external /sdcard) to become available..."
+          set +e
+          STORAGE_READY=0
+          for i in $(seq 1 90); do
+            BOOTED=$("$ADB" -s "$DEV" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            CE_AVAIL=$("$ADB" -s "$DEV" shell getprop sys.user.0.ce_available 2>/dev/null | tr -d '\r')
+            VOLD_STATE=$("$ADB" -s "$DEV" shell getprop vold.decrypt 2>/dev/null | tr -d '\r')
+            # Try probing /sdcard write/read
+            "$ADB" -s "$DEV" shell 'echo 42 > /sdcard/ci_probe 2>/dev/null' >/dev/null 2>&1
+            "$ADB" -s "$DEV" shell 'cat /sdcard/ci_probe' 2>/dev/null | grep -q '^42$'
+            if [ $? -eq 0 ] && [ "$BOOTED" = "1" ] && [ "${VOLD_STATE}" != "trigger_restart_min_framework" ]; then
+              STORAGE_READY=1; break;
+            fi
+            sleep 2
+          done
+          set -e
+          if [ "$STORAGE_READY" -ne 1 ]; then
+            echo "Storage not ready; continuing but install may fail. Dumping volumes info:" >&2
+            "$ADB" -s "$DEV" shell sm list-volumes all 2>/dev/null || true
+          fi
+
           # Try install with retries for transient 'Can't find service: package' errors
           set +e
           INSTALL_OK=1
@@ -216,6 +238,11 @@ jobs:
             if echo "$OUT" | grep -q "Can't find service: package"; then
               echo "Got 'Can't find service: package', retrying after short sleep..."
               sleep 5
+              continue
+            fi
+            if echo "$OUT" | grep -q "StorageManager.getVolumes"; then
+              echo "Detected StorageManager NullPointerException; waiting extra for storage readiness and retrying..."
+              sleep 10
               continue
             fi
             # other failures: break and show diagnostics
