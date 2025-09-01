@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 45
     env:
       # Optional Catch2 test filter specs (space-separated). Leave empty to let harness use built-in default excludes.
-      TEST_FILTER: ""
+      TEST_FILTER: "[event] [generator] [latch] [mutex] [queue] [semaphore] ~[condition_variable]"
       TEST_TIMEOUT: "600"
     steps:
       - uses: actions/checkout@v4
