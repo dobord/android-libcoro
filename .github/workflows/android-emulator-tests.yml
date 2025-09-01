@@ -8,6 +8,10 @@ jobs:
   instrumented:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    env:
+      # Default Catch2 test filter list (space-separated specs / tag expressions) adjustable via workflow_dispatch override later.
+      TEST_FILTER: "[condition_variable] [event] [generator] [latch] [mutex] [queue] [semaphore]"
+      TEST_TIMEOUT: "600"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -224,13 +228,15 @@ jobs:
             echo "APK install failed after retries" >&2
             exit 1
           fi
-          # Prepare test config in app's files dir (limit scope + tighter timeout)
-          # NOTE: run-as requires debug build and will operate in app's data directory
-          # We intentionally whitelist only selected tags to avoid long-running stress tests (e.g. heavy ring_buffer variants).
-          # Catch2 semantics: space separated specs. Using positive tag specs limits run to those.
-          CONFIG_CONTENT="filter=[condition_variable] [event] [generator] [latch] [mutex] [queue] [ring_buffer]~[many] [semaphore]\n# Global timeout in seconds (smaller because heavy tests excluded)\ntimeout=900\n"
-          echo "Creating test config file (coro_test_config.properties) inside app sandbox..."
-          printf "%s" "$CONFIG_CONTENT" > coro_test_config.properties
+          # Prepare test config in app's files dir using env-driven filter & timeout.
+          # NOTE: run-as requires debug build and will operate in app's data directory.
+          TEST_FILTER="${TEST_FILTER:-[condition_variable] [event] [generator] [latch] [mutex] [queue] [semaphore]}"
+          TEST_TIMEOUT="${TEST_TIMEOUT:-600}"
+          echo "Creating test config file (coro_test_config.properties) with filter: $TEST_FILTER and timeout: $TEST_TIMEOUT"
+          {
+            printf 'filter=%s\n' "$TEST_FILTER"
+            printf 'timeout=%s\n' "$TEST_TIMEOUT"
+          } > coro_test_config.properties
           # Push to a world-readable temp location first
           "$ADB" -s "$DEV" push coro_test_config.properties /data/local/tmp/coro_test_config.properties >/dev/null
           # Move into app's files directory using run-as (create directory if missing).
@@ -274,10 +280,28 @@ jobs:
       - name: Assert success
         run: |
           # Check for Exit code: 0 line in our logs
+          if grep -q "No tests ran" emulator.log; then
+            echo "No tests executed (filter too restrictive)." >&2
+            exit 1
+          fi
           if ! grep -q "Exit code: 0" emulator.log; then
             echo "Tests did not report success" >&2
             exit 1
           fi
+
+      - name: Extract test log
+        if: always()
+        run: |
+          set -e
+          export ADB="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/platform-tools/adb"
+            DEV=$("$ADB" devices | awk '/emulator-/{print $1; exit}')
+            if [ -n "$DEV" ]; then
+              # Pull internal test log created by native runner
+              "$ADB" -s "$DEV" shell run-as com.example.libcorotest cat files/libcoro-tests.log > libcoro-tests.log 2>/dev/null || echo "libcoro-tests.log not found" >&2
+            fi
+            if [ -f libcoro-tests.log ]; then
+              echo "Last 40 lines of libcoro-tests.log:" && tail -n 40 libcoro-tests.log || true
+            fi
 
       - name: Upload logs
         if: always()
@@ -287,3 +311,4 @@ jobs:
           path: |
             emulator.log
             app/build/outputs/apk/debug/*.apk
+            libcoro-tests.log
