@@ -9,8 +9,8 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     env:
-      # Default Catch2 test filter list (space-separated specs / tag expressions) adjustable via workflow_dispatch override later.
-      TEST_FILTER: "[condition_variable] [event] [generator] [latch] [mutex] [queue] [semaphore]"
+      # Optional Catch2 test filter specs (space-separated). Leave empty to let harness use built-in default excludes.
+      TEST_FILTER: ""
       TEST_TIMEOUT: "600"
     steps:
       - uses: actions/checkout@v4
@@ -257,11 +257,13 @@ jobs:
           fi
           # Prepare test config in app's files dir using env-driven filter & timeout.
           # NOTE: run-as requires debug build and will operate in app's data directory.
-          TEST_FILTER="${TEST_FILTER:-[condition_variable] [event] [generator] [latch] [mutex] [queue] [semaphore]}"
+          TEST_FILTER="${TEST_FILTER:-}"
           TEST_TIMEOUT="${TEST_TIMEOUT:-600}"
           echo "Creating test config file (coro_test_config.properties) with filter: $TEST_FILTER and timeout: $TEST_TIMEOUT"
           {
-            printf 'filter=%s\n' "$TEST_FILTER"
+            if [ -n "$TEST_FILTER" ]; then
+              printf 'filter=%s\n' "$TEST_FILTER"
+            fi
             printf 'timeout=%s\n' "$TEST_TIMEOUT"
           } > coro_test_config.properties
           # Push to a world-readable temp location first
